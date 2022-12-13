@@ -2,3 +2,5 @@ venv/
 models/
 msc-ai-2022/
 *.zip
+*.pyc
+**/__pycache__
