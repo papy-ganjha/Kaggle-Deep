@@ -1,6 +1,7 @@
 import torch
 import torchvision
 from torch import nn
+import torch.nn.functional as F
 
 resnet = torchvision.models.resnet.resnet50(pretrained=True)
 
@@ -128,9 +129,9 @@ class UNetWithResnet50Encoder(nn.Module):
             x = block(x, pre_pools[key])
         output_feature_map = x
         x = self.out(x)
+        # x = F.softmax(x, dim=1)
         del pre_pools
         if with_output_feature_map:
             return x, output_feature_map
         else:
             return x
-

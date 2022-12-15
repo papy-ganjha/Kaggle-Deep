@@ -43,32 +43,43 @@ class config:
 # Create a custom Dataset class
 
 
-def plot_img_masks(img, masks):
-    counter = 1
+def plot_img_masks(imgs, masks, preds, idx_class):
+    batch_size = imgs.shape[0]
+    n_cols = 3
     plt.figure(figsize=(15, 15))
-    plt.subplot(5, 6, counter)
-    plt.axis("off")
-    plt.title("image")
-    plt.imshow(img.permute(1, 2, 0))
-    counter += 1
-    for i in range(masks.shape[0]):
-        plt.subplot(5, 6, counter)
-        plt.axis("off")
-        plt.title(idx_class[i])
-        plt.imshow(masks[i])
+    masks = torch.argmax(masks, dim=1)
+    counter = 1
+    for i in range(batch_size):
+        plt.subplot(5, n_cols, counter)
         counter += 1
+        plt.title("Image")
+        plt.axis("off")
+        plt.imshow(imgs[i].permute(1, 2, 0))
+
+        plt.subplot(5, n_cols, counter)
+        counter += 1
+        plt.title("Mask")
+        plt.axis("off")
+        plt.imshow(masks[i])
+
+        plt.subplot(5, n_cols, counter)
+        counter += 1
+        plt.title("Pred")
+        plt.axis("off")
+        plt.imshow(preds[i])
+
     plt.show()
 
 
-def train(model, epochs, optimizer, criterion):
+def train(model, epochs, optimizer, criterion, train_dataloader, val_dataloader, device, idx_class):
 
+    best_val = -float("inf")
     for epoch in range(epochs):
 
         train_losses = []
         train_accuracy = []
         val_losses = []
         val_accuracy = []
-        best_val = -float("inf")
 
         ###### Train model ######
         torch.cuda.empty_cache()
@@ -81,17 +92,19 @@ def train(model, epochs, optimizer, criterion):
             # Optimize network
             optimizer.zero_grad()
             output = model(img_batch)  # output: [B, 25, H, W]
-            output = F.sigmoid(output)
+            output = F.softmax(output, dim=1)
+            preds = torch.argmax(output, dim=1)  # output: [B,H,W]
             loss = criterion(output, mask_batch)
             loss.backward()
             optimizer.step()
 
             # Save batch results
             train_losses.append(loss.item())
-            preds = torch.where(output > 0.5, 1, 0)
-            acc = torch.sum(preds == mask_batch).item(
-            ) / (mask_batch.shape[0] * mask_batch.shape[1] * mask_batch.shape[2] * mask_batch.shape[3])
-            # we divide by (batch_size * height * width) to get average accuracy per pixel
+            preds = torch.argmax(output, dim=1)
+            formatted_mask = torch.argmax(mask_batch, dim=1)
+            acc = torch.sum(preds == formatted_mask).item(
+            ) / (formatted_mask.shape[0] * formatted_mask.shape[1] * formatted_mask.shape[2])
+            # we divide by (batch_size * height * width * channels) to get average accuracy per pixel
             train_accuracy.append(acc)
 
         ###### Validate model ######
@@ -103,14 +116,15 @@ def train(model, epochs, optimizer, criterion):
 
             # Validate model
             output = model(img_batch)
-            output = F.sigmoid(output)
+            output = F.softmax(output, dim=1)
             loss = criterion(output, mask_batch)
 
             # Save batch results
             val_losses.append(loss.item())
-            preds = torch.where(output > 0.5, 1, 0)
-            acc = torch.sum(preds == mask_batch).item(
-            ) / (mask_batch.shape[0] * mask_batch.shape[1] * mask_batch.shape[2] * mask_batch.shape[3])
+            preds = torch.argmax(output, dim=1)
+            formatted_mask = torch.argmax(mask_batch, dim=1)
+            acc = torch.sum(preds == formatted_mask).item(
+            ) / (formatted_mask.shape[0] * formatted_mask.shape[1] * formatted_mask.shape[2])
             val_accuracy.append(acc)
 
         ##### Print epoch results ######
@@ -120,15 +134,17 @@ def train(model, epochs, optimizer, criterion):
             f'VALIDATION  Epoch: {epoch} | Epoch metrics | loss: {np.mean(val_losses):.4f}, accuracy: {np.mean(val_accuracy):.3f}')
         print('-' * 70)
         print('one example:')
-        preds = F.sigmoid(model(batch[0].to(device)))[0]
-        preds = torch.where(preds > 0.5, 1, 0)
+        preds = F.softmax(model(batch[0].to(device)), dim=1)
+        preds = torch.argmax(preds, dim=1)
+        # preds = torch.where(preds > 0.5, 1, 0)
         if np.mean(val_accuracy) >= best_val:
             torch.save(model.state_dict(), BEST_SAVE_PATH)
             best_val = np.mean(val_accuracy)
         else:
             torch.save(model.state_dict(), SAVE_CHECKPOINT)
-        # plot_img_masks(batch[0][0], batch[1][0])
-        # plot_img_masks(batch[0][0], preds.cpu().detach().numpy())
+        plot_img_masks(batch[0], batch[1],
+                       preds.cpu().detach().numpy(), idx_class)
+        # plot_img_masks(batch[0][0], preds.cpu().detach().numpy(), idx_class)
         print('-' * 70)
 
 

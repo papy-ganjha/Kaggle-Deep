@@ -1,7 +1,9 @@
 import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
+import torchvision.transforms.functional as TF
 from PIL import Image
+import random
 
 HEIGHT = 256
 WIDTH = 256
@@ -34,11 +36,19 @@ class KaggleDataset(Dataset):
         img = Image.open(img_path)
         mask = Image.open(mask_path)
 
-        # if self.train: # Random crop over here
-        #     i, j, h, w = transforms.RandomCrop.get_params(
-        #         img, output_size=(HEIGHT, WIDTH))
-        #     img = TF.crop(img, i, j, h, w)
-        #     mask = TF.crop(mask, i, j, h, w)
+        if self.train:  # Random crop over here
+            p = random.random()
+            if p > 0.5:
+                img = TF.hflip(img)
+                mask = TF.hflip(mask)
+            if random.random() > 0.5:
+                angle = transforms.RandomRotation.get_params([-5, 5])
+                img = TF.rotate(img, angle)
+                mask = TF.rotate(mask, angle)
+                # i, j, h, w = transforms.RandomCrop.get_params(
+                #     img, output_size=(HEIGHT, WIDTH))
+                # img = TF.crop(img, i, j, h, w)
+                # mask = TF.crop(mask, i, j, h, w)
 
         # Apply transformations
         img = self.transform_img(img)
