@@ -266,13 +266,13 @@ if __name__ == "__main__":
     epochs = 100
     lr = 0.001
     # model = UNetWithResnet50Encoder(n_classes=len(idx_class.keys())).to(device)
-    model_name = "fcn8_vgg16"
+    # model_name = "fcn8_vgg16"
     n_classes = len(idx_class.keys())
     model = UnetVGG16(25).to(device)
     # model = all_models.model_from_name[model_name](n_classes, BATCH_SIZE,
     #                                                pretrained=True,
     #                                                fixed_feature=False).to(device)
-    # PATH = "./models/vgg_checkpoint.pt"
+    # PATH = "./models/vgg_best.pt"
     # model.load_state_dict(torch.load(PATH))
     # print("model loaded!")
     if True:  # fine tunning

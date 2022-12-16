@@ -25,6 +25,7 @@ class KaggleDataset(Dataset):
         self.transform_img = transforms.Compose([
             transforms.Resize([HEIGHT, WIDTH]),
             transforms.ToTensor(),
+            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
         ])
         self.transform_mask = transforms.Compose([
             transforms.Resize(
