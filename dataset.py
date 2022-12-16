@@ -5,7 +5,7 @@ import torchvision.transforms.functional as TF
 from PIL import Image
 import random
 
-HEIGHT = 256
+HEIGHT = 320
 WIDTH = 256
 
 
@@ -15,6 +15,12 @@ class KaggleDataset(Dataset):
         # self.mask_paths = [os.path.join(mask_folder, path) for path in os.listdir(mask_folder)]
         self.mask_paths = mask_paths
         self.train = train
+
+        self.random_transform = transforms.RandomApply([
+            transforms.ColorJitter(brightness=0.5, hue=0.3),
+            transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5)),
+
+        ])
 
         self.transform_img = transforms.Compose([
             transforms.Resize([HEIGHT, WIDTH]),
@@ -30,6 +36,10 @@ class KaggleDataset(Dataset):
 
         # Select a specific image's path
         img_path = self.image_paths[index]
+        if self.mask_paths is None:
+            img = Image.open(img_path)
+            img = self.transform_img(img)
+            return img, img_path
         mask_path = self.mask_paths[index]
 
         # Load the image
@@ -45,13 +55,17 @@ class KaggleDataset(Dataset):
                 angle = transforms.RandomRotation.get_params([-5, 5])
                 img = TF.rotate(img, angle)
                 mask = TF.rotate(mask, angle)
-                # i, j, h, w = transforms.RandomCrop.get_params(
-                #     img, output_size=(HEIGHT, WIDTH))
-                # img = TF.crop(img, i, j, h, w)
-                # mask = TF.crop(mask, i, j, h, w)
+            # if random.random() > 0.5:
+            #     i, j, h, w = transforms.RandomResizedCrop.get_params(
+            #         img, scale=[0.9, 1], ratio=[0.9, 1.1]
+            #     )
+            #     img = TF.resized_crop(img, i, j, h, w, (HEIGHT, WIDTH))
+            #     mask = TF.resized_crop(mask, i, j, h, w, (HEIGHT, WIDTH))
 
         # Apply transformations
         img = self.transform_img(img)
+        # img = self.random_transform(img)
+        # img = img / 255
         mask = self.transform_mask(mask)
 
         # Scale the mask from 0-1 range to 0-255 range
@@ -59,7 +73,7 @@ class KaggleDataset(Dataset):
         # mask = mask.squeeze(0)
         # mask = torch.squeeze(mask, 0)
 
-        maps = torch.zeros((25, 256, 256))
+        maps = torch.zeros((25, HEIGHT, WIDTH))
         for i in range(25):
             indices = torch.where(mask == i)
             current_map = torch.zeros_like(mask)

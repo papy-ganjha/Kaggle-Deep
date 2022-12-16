@@ -4,3 +4,4 @@ msc-ai-2022/
 *.zip
 *.pyc
 **/__pycache__
+*.csv

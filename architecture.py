@@ -1,9 +1,11 @@
+import torchvision.models as models
+import torch.nn as nn
 import torch
 import torchvision
 from torch import nn
 import torch.nn.functional as F
 
-resnet = torchvision.models.resnet.resnet50(pretrained=True)
+resnet = torchvision.models.resnet.resnet50(weights=True)
 
 
 class ConvBlock(nn.Module):
@@ -135,3 +137,63 @@ class UNetWithResnet50Encoder(nn.Module):
             return x, output_feature_map
         else:
             return x
+
+
+class UnetVGG16(nn.Module):
+    def __init__(self, num_classes):
+        super(UnetVGG16, self).__init__()
+
+        self.vgg16 = models.vgg16(pretrained=True)
+
+        self.encoder1 = nn.Sequential(*self.vgg16.features[:5])
+        self.encoder2 = nn.Sequential(*self.vgg16.features[5:10])
+        self.encoder3 = nn.Sequential(*self.vgg16.features[10:17])
+        self.encoder4 = nn.Sequential(*self.vgg16.features[17:24])
+        self.encoder5 = nn.Sequential(*self.vgg16.features[24:])
+
+        self.conv1 = nn.Conv2d(1024, 512, 3, 1, 1)
+        self.decoder5 = nn.ConvTranspose2d(
+            512, 512, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.conv2 = nn.Conv2d(512, 256, 3, 1, 1)
+        self.decoder4 = nn.ConvTranspose2d(
+            512, 256, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.conv3 = nn.Conv2d(256, 128, 3, 1, 1)
+        self.decoder3 = nn.ConvTranspose2d(
+            256, 128, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.conv4 = nn.Conv2d(128, 64, 3, 1, 1)
+        self.decoder2 = nn.ConvTranspose2d(
+            128, 64, kernel_size=3, stride=2, padding=1, output_padding=1)
+        # self.conv5 = nn.Conv2d(28, 64, 3, 1, 1)
+        self.decoder1 = nn.ConvTranspose2d(
+            64, num_classes, kernel_size=3, stride=2, padding=1, output_padding=1)
+
+        self.final = nn.Conv2d(28, num_classes, kernel_size=1)
+
+    def forward(self, x):
+        # Encoder part
+        x1 = self.encoder1(x)
+        x2 = self.encoder2(x1)
+        x3 = self.encoder3(x2)
+        x4 = self.encoder4(x3)
+        x5 = self.encoder5(x4)
+
+        # Decoder part
+        x6 = self.decoder5(x5)
+        x6 = torch.cat((x6, x4), dim=1)
+        x6 = self.conv1(x6)
+        x7 = self.decoder4(x6)
+        x7 = torch.cat((x7, x3), dim=1)
+        x7 = self.conv2(x7)
+        x8 = self.decoder3(x7)
+        x8 = torch.cat((x8, x2), dim=1)
+        x8 = self.conv3(x8)
+        x9 = self.decoder2(x8)
+        x9 = torch.cat((x9, x1), dim=1)
+        x9 = self.conv4(x9)
+        x10 = self.decoder1(x9)
+        # x12 = torch.cat((x10, x), dim=1)
+        # x12 = self.conv5(x12)
+
+        # Final part
+        # x11 = self.final(10)
+        return x10

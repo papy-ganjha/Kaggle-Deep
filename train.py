@@ -1,30 +1,67 @@
 from __future__ import print_function, division
+import warnings
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import random
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import glob
 from torch import nn
+import os
 import torch.nn.functional as F
+from loss import DiceLoss, FocalTverskyLoss
+
+from sklearn.metrics import f1_score
+from segmentation.models import all_models
 
 from dataset import KaggleDataset
-from architecture import UNetWithResnet50Encoder
+from architecture import UNetWithResnet50Encoder, UnetVGG16
+
+from matplotlib.colors import ListedColormap
+
+colors = ListedColormap([
+    "#000000",
+    "#FFFFFF",
+    "#808080",
+    "#0000FF",
+    "#FF0000",
+    "#00FF00",
+    "#023020",
+    "#ADD8E6",
+    "#964B00",
+    "#FFFF00",
+    "#f5f5f5",
+    "#A9A9A9",
+    "#A020F0",
+    "#8B8000",
+    "#c4c4c4",
+    "#8B8000",
+    "#FFC0CB",
+    "#00008B",
+    "#FFCCCB",
+    "#FFD700",
+    "#AA6C39",
+    "#023020",
+    "#9cd3db",
+    "#C4A484",
+    "#90EE90"
+
+])
 
 
 # Ignore warnings
-import warnings
 warnings.filterwarnings("ignore")
 
 plt.ion()   # interactive mode
 
-HEIGHT = 256
+HEIGHT = 512
 WIDTH = 256
-BATCH_SIZE = 5
+BATCH_SIZE = 4
 IMAGE_PATH = './msc-ai-2022/train_images/train_images/'
 MASK_PATH = './msc-ai-2022/train_masks/train_masks/'
-BEST_SAVE_PATH = './models/binary_entropy.pt'
-SAVE_CHECKPOINT = './models/checkpoint.pt'
+BEST_SAVE_PATH = './models/vgg_best.pt'
+SAVE_CHECKPOINT = './models/vgg_checkpoint.pt'
 
 
 # PyTorch
@@ -38,7 +75,7 @@ class config:
     TRAIN_IMG_PATH = BASE_PATH + "train_images/train_images"
     TRAIN_MASK_PATH = BASE_PATH + "train_masks/train_masks"
     TEST_IMG_PATH = BASE_PATH + "test_images/test_images"
-    SAVE_PATH = "./models/resnet50.pt"
+    SAVE_PATH = "./models/vgg_model.pt"
 
 # Create a custom Dataset class
 
@@ -60,13 +97,13 @@ def plot_img_masks(imgs, masks, preds, idx_class):
         counter += 1
         plt.title("Mask")
         plt.axis("off")
-        plt.imshow(masks[i])
+        plt.imshow(masks[i], cmap=colors, vmin=0, vmax=25)
 
         plt.subplot(5, n_cols, counter)
         counter += 1
         plt.title("Pred")
         plt.axis("off")
-        plt.imshow(preds[i])
+        plt.imshow(preds[i], cmap=colors, vmin=0, vmax=25)
 
     plt.show()
 
@@ -94,16 +131,19 @@ def train(model, epochs, optimizer, criterion, train_dataloader, val_dataloader,
             output = model(img_batch)  # output: [B, 25, H, W]
             output = F.softmax(output, dim=1)
             preds = torch.argmax(output, dim=1)  # output: [B,H,W]
+
             loss = criterion(output, mask_batch)
             loss.backward()
             optimizer.step()
 
             # Save batch results
             train_losses.append(loss.item())
-            preds = torch.argmax(output, dim=1)
-            formatted_mask = torch.argmax(mask_batch, dim=1)
-            acc = torch.sum(preds == formatted_mask).item(
-            ) / (formatted_mask.shape[0] * formatted_mask.shape[1] * formatted_mask.shape[2])
+            preds = torch.argmax(output, dim=1).cpu()
+            formatted_mask = torch.argmax(batch[1], dim=1)
+            acc = f1_score(formatted_mask.view(-1),
+                           preds.view(-1).detach().numpy(), average="micro")
+            # acc = torch.sum(preds == formatted_mask).item(
+            # ) / (formatted_mask.shape[0] * formatted_mask.shape[1] * formatted_mask.shape[2])
             # we divide by (batch_size * height * width * channels) to get average accuracy per pixel
             train_accuracy.append(acc)
 
@@ -121,10 +161,12 @@ def train(model, epochs, optimizer, criterion, train_dataloader, val_dataloader,
 
             # Save batch results
             val_losses.append(loss.item())
-            preds = torch.argmax(output, dim=1)
-            formatted_mask = torch.argmax(mask_batch, dim=1)
-            acc = torch.sum(preds == formatted_mask).item(
-            ) / (formatted_mask.shape[0] * formatted_mask.shape[1] * formatted_mask.shape[2])
+            preds = torch.argmax(output, dim=1).cpu()
+            formatted_mask = torch.argmax(batch[1], dim=1)
+            acc = f1_score(formatted_mask.view(-1),
+                           preds.view(-1).detach().numpy(), average="micro")
+            # acc = torch.sum(preds == formatted_mask).item(
+            # ) / (formatted_mask.shape[0] * formatted_mask.shape[1] * formatted_mask.shape[2])
             val_accuracy.append(acc)
 
         ##### Print epoch results ######
@@ -134,6 +176,7 @@ def train(model, epochs, optimizer, criterion, train_dataloader, val_dataloader,
             f'VALIDATION  Epoch: {epoch} | Epoch metrics | loss: {np.mean(val_losses):.4f}, accuracy: {np.mean(val_accuracy):.3f}')
         print('-' * 70)
         print('one example:')
+        batch = next(val_dataloader._get_iterator())
         preds = F.softmax(model(batch[0].to(device)), dim=1)
         preds = torch.argmax(preds, dim=1)
         # preds = torch.where(preds > 0.5, 1, 0)
@@ -151,17 +194,31 @@ def train(model, epochs, optimizer, criterion, train_dataloader, val_dataloader,
 if __name__ == "__main__":
     # Very simple train/test split
     train_ratio = 0.8
-    train_set_last_idx = int(
-        len(glob.glob(config.TRAIN_IMG_PATH + "/*")) * train_ratio)
+    # train_set_last_idx = int(
+    #     len(glob.glob(config.TRAIN_IMG_PATH + "/*")) * train_ratio)
 
-    train_img_paths = sorted(
-        glob.glob(config.TRAIN_IMG_PATH + "/*"))[:train_set_last_idx]
-    train_mask_paths = sorted(
-        glob.glob(config.TRAIN_MASK_PATH + "/*"))[:train_set_last_idx]
-    val_img_paths = sorted(
-        glob.glob(config.TRAIN_IMG_PATH + "/*"))[train_set_last_idx:]
-    val_mask_paths = sorted(
-        glob.glob(config.TRAIN_MASK_PATH + "/*"))[train_set_last_idx:]
+    img_names = [name.split(".")[0]
+                 for name in os.listdir(config.TRAIN_IMG_PATH)]
+    n_train = int(train_ratio * len(img_names))
+    train_names = random.sample(img_names, n_train)
+    val_names = [name for name in img_names if name not in train_names]
+
+    train_img_paths = [
+        os.path.join(config.TRAIN_IMG_PATH, name + ".jpg")
+        for name in train_names
+    ]
+    train_mask_paths = [
+        os.path.join(config.TRAIN_MASK_PATH, name + ".png")
+        for name in train_names
+    ]
+    val_img_paths = [
+        os.path.join(config.TRAIN_IMG_PATH, name + ".jpg")
+        for name in val_names
+    ]
+    val_mask_paths = [
+        os.path.join(config.TRAIN_MASK_PATH, name + ".png")
+        for name in val_names
+    ]
 
     # Create datasets
     train_dataset = KaggleDataset(
@@ -206,13 +263,33 @@ if __name__ == "__main__":
     device = torch.device(
         'mps' if torch.backends.mps.is_available() else device)
     print('Using device:', device)
-    epochs = 15
-    lr = 0.0009
-    model = UNetWithResnet50Encoder(n_classes=len(idx_class.keys())).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.BCEWithLogitsLoss()
-    # criterion = FocalTverskyLoss()
+    epochs = 100
+    lr = 0.001
+    # model = UNetWithResnet50Encoder(n_classes=len(idx_class.keys())).to(device)
+    model_name = "fcn8_vgg16"
+    n_classes = len(idx_class.keys())
+    model = UnetVGG16(25).to(device)
+    # model = all_models.model_from_name[model_name](n_classes, BATCH_SIZE,
+    #                                                pretrained=True,
+    #                                                fixed_feature=False).to(device)
+    # PATH = "./models/vgg_checkpoint.pt"
+    # model.load_state_dict(torch.load(PATH))
+    # print("model loaded!")
+    if True:  # fine tunning
+        params_to_update = model.parameters()
+        print("Params to learn:")
+        params_to_update = []
+        for name, param in model.named_parameters():
+            if param.requires_grad == True:
+                params_to_update.append(param)
+                print("\t", name)
+        optimizer = torch.optim.SGD(params_to_update, lr=lr, momentum=0.9)
+    else:
+        optimizer = torch.optim.Adadelta(model.parameters())
+    # criterion = DiceLoss()
+    criterion = FocalTverskyLoss()
 
-    train(model, epochs, optimizer, criterion)
+    train(model, epochs, optimizer, criterion,
+          train_dataloader, val_dataloader, device, idx_class)
 
     torch.save(model.state_dict(), config.SAVE_PATH)

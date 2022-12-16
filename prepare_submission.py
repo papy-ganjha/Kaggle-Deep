@@ -32,7 +32,7 @@ def rle_decode(mask_rle, shape):
 
 def create_rles():
     """Used for Kaggle submission: predicts and encode all test images"""
-    dir = 'data/test_preds/'
+    dir = './msc-ai-2022/test_pillow/'
     N = len(list(os.listdir(dir)))
     with open('submission_file.csv', 'w') as f:
         f.write('ImageClassId,rle_mask\n')
@@ -45,6 +45,6 @@ def create_rles():
 
             for x in range(1, 25):
                 enc = rle_encode(mask == x)
-                f.write(f"{i.split('_')[0]}_{x},{enc}\n")
+                f.write(f"{i.split('/')[-1].replace('jpg', 'png')}_{x},{enc}\n")
 
 create_rles()
