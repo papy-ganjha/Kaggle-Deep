@@ -51,18 +51,17 @@ class KaggleDataset(Dataset):
             if p > 0.5:
                 img = TF.hflip(img)
                 mask = TF.hflip(mask)
-            if random.random() > 0.5:
-                angle = transforms.RandomRotation.get_params([-5, 5])
-                img = TF.rotate(img, angle)
-                mask = TF.rotate(mask, angle)
+            # if random.random() > 0.5:
+            #     angle = transforms.RandomRotation.get_params([-25, 25])
+            #     img = TF.rotate(img, angle)
+            #     mask = TF.rotate(mask, angle)
             if random.random() > 0.5:
                 img = self.random_transform(img)
-            # if random.random() > 0.5:
-            #     i, j, h, w = transforms.RandomResizedCrop.get_params(
-            #         img, scale=[0.9, 1], ratio=[0.9, 1.1]
-            #     )
-            #     img = TF.resized_crop(img, i, j, h, w, (HEIGHT, WIDTH))
-            #     mask = TF.resized_crop(mask, i, j, h, w, (HEIGHT, WIDTH))
+            if random.random() > 0.5:
+                t = transforms.RandomAffine.get_params(degrees=[-20, 20], translate=None, scale_ranges=(
+                    1, 2), shears=[1, 10, 1, 10], img_size=[HEIGHT, WIDTH])
+                img = TF.affine(img, *t)
+                mask = TF.affine(mask, *t)
 
         # Apply transformations
         img = self.transform_img(img)

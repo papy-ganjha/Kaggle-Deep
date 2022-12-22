@@ -102,15 +102,15 @@ def plot_img_masks(imgs, masks, preds, idx_class):
 
 
 def get_factor_lr(epoch: int):
-    if epoch <= 5:
-        return 1
     if epoch <= 10:
-        return 0.9
+        return 1
     if epoch <= 15:
+        return 0.9
+    if epoch <= 30:
         return 0.7
-    if epoch <= 25:
+    if epoch <= 45:
         return 0.3
-    if epoch <= 95:
+    if epoch <= 120:
         return 0.15
     return 0.08
 
@@ -255,9 +255,9 @@ if __name__ == "__main__":
 
     # Create dataloaders
     train_dataloader = DataLoader(
-        train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
+        train_dataset, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=0)
     val_dataloader = DataLoader(
-        val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+        val_dataset, batch_size=config.BATCH_SIZE, shuffle=False, num_workers=0)
 
     idx_class = {
         0: "Background",
