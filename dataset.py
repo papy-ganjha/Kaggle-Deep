@@ -17,8 +17,7 @@ class KaggleDataset(Dataset):
         self.train = train
 
         self.random_transform = transforms.RandomApply([
-            transforms.ColorJitter(brightness=0.5, hue=0.3),
-            transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5)),
+            transforms.ColorJitter(contrast=0.2, brightness=0.4, hue=0.2),
 
         ])
 
@@ -56,6 +55,8 @@ class KaggleDataset(Dataset):
                 angle = transforms.RandomRotation.get_params([-5, 5])
                 img = TF.rotate(img, angle)
                 mask = TF.rotate(mask, angle)
+            if random.random() > 0.5:
+                img = self.random_transform(img)
             # if random.random() > 0.5:
             #     i, j, h, w = transforms.RandomResizedCrop.get_params(
             #         img, scale=[0.9, 1], ratio=[0.9, 1.1]
