@@ -6,3 +6,4 @@ msc-ai-2022/
 **/__pycache__
 *.csv
 *.png
+*.ipynb
